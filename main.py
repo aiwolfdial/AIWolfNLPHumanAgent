@@ -1,13 +1,13 @@
 import configparser
-from typing import Union
-import player
-from aiwolf_nlp_common import AIWolfNLPAction
 from aiwolf_nlp_common.connection import(
     SSHServer
 )
+from player.human import Human
+from aiwolf_nlp_common import util
 
 def main(sock: SSHServer, inifile:configparser.ConfigParser, received:list, name:str):
-    agent = player.agent.Agent(inifile=inifile,name=name,log_info=log_info)
+    agent = Human(inifile=inifile, name=name)
+
     if received != None: agent.set_received(received=received)
 
     while agent.gameContinue:
@@ -18,9 +18,6 @@ def main(sock: SSHServer, inifile:configparser.ConfigParser, received:list, name
         agent.get_info()
         message = agent.action()
 
-        if AIWolfNLPAction.is_initialize(request=agent.request):
-            agent = lib.util.init_role(agent=agent,inifile=inifile, name=name, log_info=log_info)
-
         if message != "":
             sock.send(message=message)
 
@@ -29,17 +26,13 @@ def main(sock: SSHServer, inifile:configparser.ConfigParser, received:list, name
 if __name__ == "__main__":
     config_path = "./res/config.ini"
 
-    inifile = lib.util.check_config(config_path=config_path)
+    inifile = util.check_config(config_path=config_path)
     inifile.read(config_path,"UTF-8")
 
     while True:
+
+        sock = SSHServer(inifile=inifile, name=inifile.get("agent","name1"))
     
-        # connect to server or listen client
-        if inifile.getboolean("connection","ssh_flag"):
-            sock = lib.connection.SSHServer(inifile=inifile, name=inifile.get("agent","name1"))
-        else:
-            sock = lib.connection.TCPServer(inifile=inifile, name=inifile.get("agent","name1")) if inifile.getboolean("connection","host_flag") else lib.connection.TCPClient(inifile=inifile)
-        
         sock.connect()
 
         received = None

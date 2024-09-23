@@ -1,22 +1,19 @@
 import configparser
-import inspect
 import math
 import json
+import curses
+import time
 from timeout_decorator import timeout, TimeoutError
 from typing import Callable
-from lib import util
+from aiwolf_nlp_common import util
 from aiwolf_nlp_common import AIWolfNLPAction
-from lib.log import LogInfo, AgentLog
 
-class Agent:
-    def __init__(self, inifile:configparser.ConfigParser, name:str, log_info:LogInfo, is_hand_over:bool=False):
+class Human:
+    def __init__(self, inifile:configparser.ConfigParser, name:str, is_hand_over:bool=False):
        self.time_limit:float = 1.0
        self.name:str = name
        self.received:list = []
        self.gameContinue:bool = True
-
-       if not is_hand_over:
-           self.logger = AgentLog(inifile=inifile, agent_name=name, log_info=log_info)
 
        random_talk_path:str = inifile.get("filePath","random_talk")
        _ = util.check_config(random_talk_path)
@@ -62,6 +59,29 @@ class Agent:
     
     def input_with_timelimit(self, stdscr:curses.window) -> str:
         start_time = time.time()
+        max_y, max_x = stdscr.getmaxyx()
+
+        # 描画箇所
+        y_pos = 0
+        x_pos = 0
+
+        # 前の表示を削除
+        stdscr.clear()
+        stdscr.refresh()
+
+        stdscr.addstr(0, 0, "Remain Time:" + str(1000))
+        y_pos += 1
+        y_pos = self.output_talk_history(stdscr=stdscr, y_pos=y_pos)
+
+        # 見えやすくするために1行開ける
+        y_pos += 1
+
+        input_start_pos = y_pos
+        input_prompt = "input message >>:"
+
+        stdscr.addstr(input_start_pos, 0, input_prompt)
+        x_pos = len(input_prompt)
+
         curses.curs_set(1)  # カーソルを表示
         stdscr.timeout(1000) # getchの上限を設定
 
@@ -72,12 +92,16 @@ class Agent:
             elapsed_time = (int)(current_time - start_time)
             remain_time = self.time_limit - elapsed_time
 
-            stdscr.addstr(0, 0, "Time:" + str(remain_time))
-            stdscr.move(1, len(input_text))  # カーソルの位置を調整
+            stdscr.addstr(0, 0, "Remain Time:" + str(remain_time))
+            stdscr.addstr(input_start_pos, 0, input_prompt)
+            stdscr.move(y_pos, x_pos)  # カーソルの位置を調整
 
             key = stdscr.getch()  # 1文字ずつキーを取得
             
             if key == -1:
+                continue
+
+            if key == 10 and len(input_text) == 0:
                 continue
 
             if key == 10:  # Enterキー (ASCIIコード10)
@@ -85,17 +109,56 @@ class Agent:
             elif key in (127, 8, curses.KEY_BACKSPACE):  # バックスペースキーの様々な可能性を考慮
                 if input_text:
                     input_text.pop()
-                    stdscr.move(1, 0)
+                    stdscr.move(y_pos, 0)
                     stdscr.clrtoeol()  # 1行目の入力部分をクリア
-                    stdscr.addstr(1, 0, ''.join(input_text))  # 入力を再描画
-                    stdscr.move(1, len(input_text))  # カーソルの位置を調整
+                    stdscr.addstr(y_pos, 0, ''.join(input_text))  # 入力を再描画
+                    stdscr.move(y_pos, len(input_text))  # カーソルの位置を調整a
             else:
                 input_text.append(chr(key))  # 入力されたキーを追加
-                stdscr.addstr(1, 0, ''.join(input_text))  # 入力を再描画
+
+                write_start_pos = 0
+                write_y_pos = input_start_pos
+                one_line_chars = max_x - len(input_prompt)
+                remain_text = len(input_text)
+
+                while remain_text > 0:
+                    write_end_pos = write_start_pos + one_line_chars
+                    write_text = input_text[write_start_pos:write_end_pos]
+                    stdscr.addstr(write_y_pos, len(input_prompt), ''.join(write_text))  # 入力を再描画
+
+                    remain_text -= len(write_text)
+                    write_start_pos = write_end_pos
+                    write_y_pos += 1
+                
+                if len(write_text) == one_line_chars:
+                    x_pos = len(input_prompt)
+                    y_pos += 1
+                else:
+                    x_pos = len(input_prompt) + len(write_text)
 
             stdscr.refresh()
         
         return ''.join(input_text)
+    
+    def output_talk_history(self, stdscr:curses.window, y_pos:int) -> int:
+        max_y, max_x = stdscr.getmaxyx()
+
+        # 見えやすくするための改行　
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "====== Talk History =====")
+        y_pos += 1
+
+        for talk in self.talkHistory:
+            talk_player = talk["agent"]
+            talk_content = talk["text"]
+            talk_display = talk_player + " : " + talk_content
+
+            stdscr.addstr(y_pos, 0, talk_display)
+
+            y_pos += len(talk_display)//max_y + 1
+        
+        return y_pos
     
     def send_agent_index(func:Callable):
         
@@ -160,8 +223,6 @@ class Agent:
             self.whisperHistory = data["whisperHistory"]
 
         self.request = data["request"]
-
-        self.logger.get_info(get_info=data, request=self.request)
    
     def initialize(self) -> None:
         self.index:int = util.get_index_from_name(agent_name=self.gameInfo["agent"])
@@ -191,15 +252,14 @@ class Agent:
     
     @with_timelimit
     def talk(self) -> str:
-        comment:str = util.random_select(self.comments)
-        self.logger.talk(comment=comment)
+        print(self.talkHistory)
+        comment:str = curses.wrapper(self.input_with_timelimit)
         return comment
     
     @with_timelimit
     @send_agent_index
     def vote(self) -> int:
         vote_target:int = util.random_select(self.alive)
-        self.logger.vote(vote_target=vote_target)
         return vote_target
     
     @with_timelimit
@@ -208,7 +268,6 @@ class Agent:
 
     def finish(self) -> str:
         self.gameContinue = False
-        self.logger.close()
 
     def action(self) -> str:
 
@@ -240,7 +299,6 @@ class Agent:
         new_agent.gameContinue = self.gameContinue
         new_agent.comments = self.comments
         new_agent.received = self.received
-        new_agent.logger = self.logger
 
         # get_info
         if hasattr(self,'gameInfo'):
