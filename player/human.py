@@ -72,6 +72,8 @@ class Human:
         stdscr.addstr(0, 0, "Remain Time:" + str(1000))
         y_pos += 1
         y_pos = self.output_talk_history(stdscr=stdscr, y_pos=y_pos)
+        is_back = is_input = False
+        is_y_decrement = False
 
         # 見えやすくするために1行開ける
         y_pos += 1
@@ -94,7 +96,14 @@ class Human:
 
             stdscr.addstr(0, 0, "Remain Time:" + str(remain_time))
             stdscr.addstr(input_start_pos, 0, input_prompt)
-            stdscr.move(y_pos, x_pos)  # カーソルの位置を調整
+
+            if is_y_decrement:
+                stdscr.move(y_pos, max_x - 1)  # カーソルの位置を調整
+            else:
+                stdscr.move(y_pos, x_pos)  # カーソルの位置を調整
+            
+            is_back = is_input = False
+            is_y_decrement = False
 
             key = stdscr.getch()  # 1文字ずつキーを取得
             
@@ -109,32 +118,43 @@ class Human:
             elif key in (127, 8, curses.KEY_BACKSPACE):  # バックスペースキーの様々な可能性を考慮
                 if input_text:
                     input_text.pop()
-                    stdscr.move(y_pos, 0)
-                    stdscr.clrtoeol()  # 1行目の入力部分をクリア
-                    stdscr.addstr(y_pos, 0, ''.join(input_text))  # 入力を再描画
-                    stdscr.move(y_pos, len(input_text))  # カーソルの位置を調整a
+                    is_back = True
+                    # stdscr.move(y_pos, 0)
+                    # stdscr.clrtoeol()  # 1行目の入力部分をクリア
+                    # stdscr.addstr(y_pos, 0, ''.join(input_text))  # 入力を再描画
+                    # stdscr.move(y_pos, len(input_text))  # カーソルの位置を調整
             else:
-                input_text.append(chr(key))  # 入力されたキーを追加
+                input_text.append(chr(key))  # 入力されたキーを追加      
+                is_input = True
 
-                write_start_pos = 0
-                write_y_pos = input_start_pos
-                one_line_chars = max_x - len(input_prompt)
-                remain_text = len(input_text)
+            write_start_pos = 0
+            write_y_pos = input_start_pos
+            one_line_chars = max_x - len(input_prompt)
+            remain_text = len(input_text)
 
-                while remain_text > 0:
-                    write_end_pos = write_start_pos + one_line_chars
-                    write_text = input_text[write_start_pos:write_end_pos]
-                    stdscr.addstr(write_y_pos, len(input_prompt), ''.join(write_text))  # 入力を再描画
+            while remain_text > 0:
+                write_end_pos = write_start_pos + one_line_chars
+                write_text = input_text[write_start_pos:write_end_pos]
+                stdscr.move(write_y_pos, 0)  # カーソルの位置を調整
+                stdscr.clrtoeol()  # カーソルがある部分の入力部分をクリア
+                stdscr.move(write_y_pos+1, 0)  # カーソルの位置を調整
+                stdscr.clrtoeol()  # カーソルがある部分の入力部分をクリア
+                stdscr.addstr(write_y_pos, len(input_prompt), ''.join(write_text))  # 入力を再描画
 
-                    remain_text -= len(write_text)
-                    write_start_pos = write_end_pos
-                    write_y_pos += 1
-                
-                if len(write_text) == one_line_chars:
-                    x_pos = len(input_prompt)
+                remain_text -= len(write_text)
+                write_start_pos = write_end_pos
+                write_y_pos += 1
+            
+            if len(write_text)  == one_line_chars - 1 and is_back:
+                y_pos -= 1
+                is_y_decrement = True
+            elif len(write_text) == one_line_chars:
+                x_pos = len(input_prompt)
+
+                if is_input:
                     y_pos += 1
-                else:
-                    x_pos = len(input_prompt) + len(write_text)
+            else:
+                x_pos = len(input_prompt) + len(write_text)
 
             stdscr.refresh()
         
@@ -252,8 +272,14 @@ class Human:
     
     @with_timelimit
     def talk(self) -> str:
-        print(self.talkHistory)
         comment:str = curses.wrapper(self.input_with_timelimit)
+
+        for talk in self.talkHistory:
+            talk_player = talk["agent"]
+            talk_content = talk["text"]
+            talk_display = talk_player + " : " + talk_content
+            print(talk_display)
+
         return comment
     
     @with_timelimit
