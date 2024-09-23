@@ -71,6 +71,17 @@ class Human:
 
         stdscr.addstr(0, 0, "Remain Time:" + str(1000))
         y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "You are " + self.gameInfo["agent"] + ".")
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "Your role is " + self.role + ".")
+        y_pos += 1
+
+
+        # 見えやすくするために1行開ける
+        y_pos += 1
+
         y_pos = self.output_talk_history(stdscr=stdscr, y_pos=y_pos)
         is_back = is_input = False
         is_y_decrement = False
@@ -131,6 +142,7 @@ class Human:
             write_y_pos = input_start_pos
             one_line_chars = max_x - len(input_prompt)
             remain_text = len(input_text)
+            write_text = []
 
             while remain_text > 0:
                 write_end_pos = write_start_pos + one_line_chars
@@ -155,6 +167,10 @@ class Human:
                     y_pos += 1
             else:
                 x_pos = len(input_prompt) + len(write_text)
+            
+            if len(write_text) == 0:
+                stdscr.move(input_start_pos, 0)  # カーソルの位置を調整
+                stdscr.clrtoeol()  # カーソルがある部分の入力部分をクリア
 
             stdscr.refresh()
         
@@ -249,6 +265,9 @@ class Human:
 
         self.time_limit:float = int(self.gameSetting["actionTimeout"])/1000 # ms -> s
         self.role:str = self.gameInfo["roleMap"][self.gameInfo["agent"]]
+
+        print("You are " + self.gameInfo["agent"] + ".")
+        print("Your role is " + self.role + ".")
 
     def daily_initialize(self) -> None:
         self.alive = []
