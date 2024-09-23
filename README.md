@@ -11,11 +11,11 @@
 1. 自身の仮想環境などを用意してください。
 1. このリポジトリをクローン後、以下のコマンドを実行してください。
     ```sh
-    $ pip install -r requirement.txt
+    $ pip install -r ./res/requirements.txt 
     ```
 1. その後、以下のコマンドを実行してください。
     ```
-    # pip install -i https://test.pypi.org/simple/ aiwolf-nlp-common==0.0.18
+    $ pip install -i https://test.pypi.org/simple/ aiwolf-nlp-common==0.0.18
     ```
 
 ## 実行方法
