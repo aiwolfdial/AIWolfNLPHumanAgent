@@ -1,6 +1,7 @@
 import configparser
 import math
 import json
+import re
 import curses
 import time
 from timeout_decorator import timeout, TimeoutError
@@ -69,18 +70,30 @@ class Human:
         stdscr.clear()
         stdscr.refresh()
 
-        stdscr.addstr(0, 0, "Remain Time:" + str(1000))
+        stdscr.addstr(0, 0, "Remain Time:" + str(self.time_limit))
+        y_pos += 1
         y_pos += 1
 
+        stdscr.addstr(y_pos, 0, "===== Game Info =====")
+        y_pos += 1
         stdscr.addstr(y_pos, 0, "You are " + self.gameInfo["agent"] + ".")
         y_pos += 1
 
         stdscr.addstr(y_pos, 0, "Your role is " + self.role + ".")
         y_pos += 1
 
-
-        # 見えやすくするために1行開ける
+        stdscr.addstr(y_pos, 0, "Action: " + self.request + ".")
         y_pos += 1
+
+        if self.gameInfo is not None and self.gameInfo.get("divineResult") is not None:
+            divine_result:str = self.gameInfo["divineResult"]
+            y_pos += 1
+
+            stdscr.addstr(y_pos, 0, "===== Divine Result =====")
+            y_pos += 1
+            stdscr.addstr(y_pos, 0, divine_result.get("target") + " is " +  divine_result.get("result"))
+            y_pos += 1
+            y_pos += 1
 
         y_pos = self.output_talk_history(stdscr=stdscr, y_pos=y_pos)
         is_back = is_input = False
@@ -130,10 +143,6 @@ class Human:
                 if input_text:
                     input_text.pop()
                     is_back = True
-                    # stdscr.move(y_pos, 0)
-                    # stdscr.clrtoeol()  # 1行目の入力部分をクリア
-                    # stdscr.addstr(y_pos, 0, ''.join(input_text))  # 入力を再描画
-                    # stdscr.move(y_pos, len(input_text))  # カーソルの位置を調整
             else:
                 input_text.append(chr(key))  # 入力されたキーを追加      
                 is_input = True
@@ -175,6 +184,131 @@ class Human:
             stdscr.refresh()
         
         return ''.join(input_text)
+    
+    def input_number_with_timelimit(self, stdscr:curses.window) -> int:
+        start_time = time.time()
+        max_y, max_x = stdscr.getmaxyx()
+
+        # 描画箇所
+        y_pos = 0
+        x_pos = 0
+
+        # 前の表示を削除
+        stdscr.clear()
+        stdscr.refresh()
+
+        stdscr.addstr(0, 0, "Remain Time:" + str(self.time_limit))
+        y_pos += 1
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "===== Game Info =====")
+        y_pos += 1
+        stdscr.addstr(y_pos, 0, "You are " + self.gameInfo["agent"] + ".")
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "Your role is " + self.role + ".")
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "Action: " + self.request + ".")
+        y_pos += 1
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "===== Action Info =====")
+        y_pos += 1
+
+        output_alive = [util.index_to_agent_format(agent_index=n) for n in self.alive]
+        stdscr.addstr(y_pos, 0, "Alive agent is " + ", ".join(output_alive) + ".")
+        y_pos += 1
+
+        stdscr.addstr(y_pos, 0, "Please enter only one number, such as “1” or “2”.")
+        y_pos += 1
+
+        # 見えやすくするために1行開ける
+        y_pos += 1
+        is_back = is_input = False
+        is_y_decrement = False
+
+        input_start_pos = y_pos
+        input_prompt = "input message >>:"
+
+        stdscr.addstr(input_start_pos, 0, input_prompt)
+        x_pos = len(input_prompt)
+
+        curses.curs_set(1)  # カーソルを表示
+        stdscr.timeout(1000) # getchの上限を設定
+
+        input_text = []
+
+        while True:
+            current_time = time.time()
+            elapsed_time = (int)(current_time - start_time)
+            remain_time = self.time_limit - elapsed_time
+
+            stdscr.addstr(0, 0, "Remain Time:" + str(remain_time))
+            stdscr.addstr(input_start_pos, 0, input_prompt)
+
+            if is_y_decrement:
+                stdscr.move(y_pos, max_x - 1)  # カーソルの位置を調整
+            else:
+                stdscr.move(y_pos, x_pos)  # カーソルの位置を調整
+            
+            is_back = is_input = False
+            is_y_decrement = False
+
+            key = stdscr.getch()  # 1文字ずつキーを取得
+            
+            if key == -1:
+                continue
+
+            if key == 10 and len(input_text) == 0 and re.match(".*[a-zA-Z\s\.\,]+", ''.join(input_text)):
+                continue
+            elif key == 10 and len(input_text) != 0 and ''.join(input_text).isdecimal():
+                break
+            elif key in (127, 8, curses.KEY_BACKSPACE):  # バックスペースキーの様々な可能性を考慮
+                if input_text:
+                    input_text.pop()
+                    is_back = True
+            else:
+                input_text.append(chr(key))  # 入力されたキーを追加      
+                is_input = True
+
+            write_start_pos = 0
+            write_y_pos = input_start_pos
+            one_line_chars = max_x - len(input_prompt)
+            remain_text = len(input_text)
+            write_text = []
+
+            while remain_text > 0:
+                write_end_pos = write_start_pos + one_line_chars
+                write_text = input_text[write_start_pos:write_end_pos]
+                stdscr.move(write_y_pos, 0)  # カーソルの位置を調整
+                stdscr.clrtoeol()  # カーソルがある部分の入力部分をクリア
+                stdscr.move(write_y_pos+1, 0)  # カーソルの位置を調整
+                stdscr.clrtoeol()  # カーソルがある部分の入力部分をクリア
+                stdscr.addstr(write_y_pos, len(input_prompt), ''.join(write_text))  # 入力を再描画
+
+                remain_text -= len(write_text)
+                write_start_pos = write_end_pos
+                write_y_pos += 1
+            
+            if len(write_text)  == one_line_chars - 1 and is_back:
+                y_pos -= 1
+                is_y_decrement = True
+            elif len(write_text) == one_line_chars:
+                x_pos = len(input_prompt)
+
+                if is_input:
+                    y_pos += 1
+            else:
+                x_pos = len(input_prompt) + len(write_text)
+            
+            if len(write_text) == 0:
+                stdscr.move(input_start_pos, 0)  # カーソルの位置を調整
+                stdscr.clrtoeol()  # カーソルがある部分の入力部分をクリア
+
+            stdscr.refresh()
+
+        return int(''.join(input_text))
     
     def output_talk_history(self, stdscr:curses.window, y_pos:int) -> int:
         max_y, max_x = stdscr.getmaxyx()
@@ -293,6 +427,15 @@ class Human:
     def talk(self) -> str:
         comment:str = curses.wrapper(self.input_with_timelimit)
 
+        if self.gameInfo is not None and self.gameInfo.get("divineResult") is not None:
+            divine_result:str = self.gameInfo["divineResult"]
+
+            print("===== Divine Result =====")
+            print(divine_result.get("target") + " is " +  divine_result.get("result"))
+            print()
+
+            self.gameInfo["divineResult"] = None
+
         for talk in self.talkHistory:
             talk_player = talk["agent"]
             talk_content = talk["text"]
@@ -304,9 +447,21 @@ class Human:
     @with_timelimit
     @send_agent_index
     def vote(self) -> int:
-        vote_target:int = util.random_select(self.alive)
+        vote_target:int = curses.wrapper(self.input_number_with_timelimit)
         return vote_target
     
+    @with_timelimit
+    @send_agent_index
+    def divine(self) -> int:
+        divine_target:int = curses.wrapper(self.input_number_with_timelimit)
+        return divine_target
+    
+    @with_timelimit
+    @send_agent_index
+    def attack(self) -> int:
+        attack_target:int = curses.wrapper(self.input_number_with_timelimit)
+        return attack_target
+
     @with_timelimit
     def whisper(self) -> None:
         pass
@@ -330,6 +485,10 @@ class Human:
             return self.talk()
         elif AIWolfNLPAction.is_vote(request=self.request):
             return self.vote()
+        elif self.request == "DIVINE":
+            return self.divine()
+        elif self.request == "ATTACK":
+            return self.attack()
         elif AIWolfNLPAction.is_whisper(request=self.request):
             self.whisper()
         elif AIWolfNLPAction.is_finish(request=self.request):
