@@ -322,11 +322,16 @@ class Human:
         for talk in self.talkHistory:
             talk_player = talk["agent"]
             talk_content = talk["text"]
+
+            if type(talk_player) is int:
+                talk_player = util.index_to_agent_format(agent_index=talk_player)
+
             talk_display = talk_player + " : " + talk_content
 
             stdscr.addstr(y_pos, 0, talk_display)
 
-            y_pos += len(talk_display)//max_y + 1
+            y_pos += len(talk_display)//max_x + 1
+            y_pos += 1
         
         return y_pos
     
@@ -439,6 +444,10 @@ class Human:
         for talk in self.talkHistory:
             talk_player = talk["agent"]
             talk_content = talk["text"]
+
+            if type(talk_player) is int:
+                talk_player = util.index_to_agent_format(agent_index=talk_player)
+
             talk_display = talk_player + " : " + talk_content
             print(talk_display)
 
